@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electric Guitar Price Index v1</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="data.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .tab-btn { transition: all 0.15s; }
+    .tab-btn.active { background: #1e3a5f; color: white; }
+    .tab-btn:not(.active):hover { background: #f1f5f9; }
+    .chart-container { position: relative; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: #e2e8f0; }
+    th.sort-asc::after { content: ' ↑'; }
+    th.sort-desc::after { content: ' ↓'; }
+    .pct-pos { color: #16a34a; font-weight: 600; }
+    .pct-neg { color: #dc2626; font-weight: 600; }
+    .group-badge {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .group-Fender { background: #fee2e2; color: #991b1b; }
+    .group-Gibson { background: #fef3c7; color: #92400e; }
+    .group-PRS { background: #dbeafe; color: #1e40af; }
+    .group-Other { background: #d1fae5; color: #065f46; }
+    .group-Vintage { background: #ede9fe; color: #5b21b6; }
+    .scrollable-table { overflow-x: auto; overflow-y: auto; max-height: 600px; }
+    .scrollable-table table { min-width: 600px; }
+    .scrollable-table thead th { position: sticky; top: 0; z-index: 10; }
+    .legend-item { cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .legend-item.hidden-series { opacity: 0.4; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .year-badge {
+      font-size: 0.7rem; padding: 2px 6px; border-radius: 3px;
+      background: #f1f5f9; color: #475569;
+    }
+    #csp-search { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; font-size: 0.875rem; }
+    .csp-link { color: #2563eb; text-decoration: none; font-size: 0.8rem; }
+    .csp-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- Header -->
+<header class="bg-[#1e3a5f] text-white shadow-md">
+  <div class="max-w-7xl mx-auto px-4 py-4">
+    <div class="flex items-baseline gap-4">
+      <h1 class="text-2xl font-bold tracking-tight">Electric Guitar Price Index</h1>
+      <span class="text-slate-300 text-sm">v1 · Powered by Reverb data</span>
+    </div>
+    <p class="text-slate-300 text-sm mt-1">Tracks resale prices for 142 guitar models, indexed to 2019 = 1,000</p>
+  </div>
+</header>
+
+<!-- Tab Navigation -->
+<nav class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-20">
+  <div class="max-w-7xl mx-auto px-4">
+    <div class="flex overflow-x-auto gap-0.5 py-2" id="tab-nav">
+      <button class="tab-btn active px-4 py-2 rounded text-sm font-medium" data-tab="summary">Summary Charts</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="membership">CSP Membership</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="index">Index</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm-q1-2026">TTM Q1 2026</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm-q4-2025">TTM Q4 2025</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm-q3-2025">TTM Q3 2025</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="order-counts">Order Counts</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="csp-chart">Individual CSP</button>
+    </div>
+  </div>
+</nav>
+
+<main class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- ===== TAB: Summary Charts ===== -->
+  <div id="tab-summary" class="tab-panel active">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <!-- Group snapshot cards -->
+      <div id="group-cards" class="lg:col-span-1 space-y-2"></div>
+      <!-- Annual chart -->
+      <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+        <h2 class="text-base font-semibold text-slate-700 mb-1">Annual Year-End Index by Group</h2>
+        <p class="text-xs text-slate-500 mb-3">Base = 1,000 (2018)</p>
+        <div class="chart-container" style="height:300px">
+          <canvas id="annualChart"></canvas>
+        </div>
+        <!-- Custom legend -->
+        <div id="annualLegend" class="flex flex-wrap gap-4 mt-3 justify-center"></div>
+      </div>
+    </div>
+
+    <!-- Group comparison table -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <h2 class="text-base font-semibold text-slate-700 mb-3">2024 Group Summary</h2>
+      <div class="scrollable-table">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-slate-50 text-slate-600 text-left">
+              <th class="px-4 py-2 font-semibold">Group</th>
+              <th class="px-4 py-2 font-semibold text-right">2024 YE Index</th>
+              <th class="px-4 py-2 font-semibold text-right">2024 Y/Y</th>
+              <th class="px-4 py-2 font-semibold text-right">Index Weight</th>
+              <th class="px-4 py-2 font-semibold text-right">CSP Count</th>
+              <th class="px-4 py-2 font-semibold text-right">CSP %</th>
+            </tr>
+          </thead>
+          <tbody id="groupTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Annual tables grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4" id="annualTables"></div>
+  </div>
+
+  <!-- ===== TAB: CSP Membership ===== -->
+  <div id="tab-membership" class="tab-panel">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-700">CSP Membership</h2>
+          <p class="text-xs text-slate-500">142 guitar models tracked in the index</p>
+        </div>
+        <div class="flex gap-2 flex-wrap items-center">
+          <input type="text" id="csp-search" placeholder="Search models…" class="w-48">
+          <select id="csp-group-filter" class="border border-slate-300 rounded px-2 py-1.5 text-sm">
+            <option value="">All Groups</option>
+            <option value="Fender">Fender</option>
+            <option value="Gibson">Gibson</option>
+            <option value="PRS">PRS</option>
+            <option value="Other">Other</option>
+            <option value="Vintage">Vintage</option>
+          </select>
+        </div>
+      </div>
+      <div class="scrollable-table">
+        <table class="w-full text-sm" id="membershipTable">
+          <thead>
+            <tr class="bg-slate-50 text-slate-600 text-left">
+              <th class="sortable px-4 py-2 font-semibold" data-col="slug">Guitar Model</th>
+              <th class="sortable px-4 py-2 font-semibold text-right" data-col="weight">2024 Weight %</th>
+              <th class="sortable px-4 py-2 font-semibold" data-col="group">Group</th>
+            </tr>
+          </thead>
+          <tbody id="membershipBody"></tbody>
+        </table>
+      </div>
+      <div class="text-xs text-slate-400 mt-2" id="membership-count"></div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: Index (Weekly) ===== -->
+  <div id="tab-index" class="tab-panel">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-700">Weekly Price Index</h2>
+          <p class="text-xs text-slate-500">Click legend items to toggle series</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="setIndexRange('all')" class="range-btn active text-xs px-3 py-1.5 rounded border" data-range="all">All</button>
+          <button onclick="setIndexRange('3y')" class="range-btn text-xs px-3 py-1.5 rounded border" data-range="3y">3Y</button>
+          <button onclick="setIndexRange('1y')" class="range-btn text-xs px-3 py-1.5 rounded border" data-range="1y">1Y</button>
+        </div>
+      </div>
+      <div id="indexLegend" class="flex flex-wrap gap-4 mb-3"></div>
+      <div class="chart-container" style="height:420px">
+        <canvas id="indexChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: TTM Q1 2026 ===== -->
+  <div id="tab-ttm-q1-2026" class="tab-panel">
+    <div id="ttm-q1-2026-content"></div>
+  </div>
+
+  <!-- ===== TAB: TTM Q4 2025 ===== -->
+  <div id="tab-ttm-q4-2025" class="tab-panel">
+    <div id="ttm-q4-2025-content"></div>
+  </div>
+
+  <!-- ===== TAB: TTM Q3 2025 ===== -->
+  <div id="tab-ttm-q3-2025" class="tab-panel">
+    <div id="ttm-q3-2025-content"></div>
+  </div>
+
+  <!-- ===== TAB: Order Counts ===== -->
+  <div id="tab-order-counts" class="tab-panel">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-700">Weekly Order Counts</h2>
+          <p class="text-xs text-slate-500">Number of sales used in index calculation each week</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="setCountsRange('all')" class="counts-range-btn active text-xs px-3 py-1.5 rounded border" data-range="all">All</button>
+          <button onclick="setCountsRange('3y')" class="counts-range-btn text-xs px-3 py-1.5 rounded border" data-range="3y">3Y</button>
+          <button onclick="setCountsRange('1y')" class="counts-range-btn text-xs px-3 py-1.5 rounded border" data-range="1y">1Y</button>
+        </div>
+      </div>
+      <div id="countsLegend" class="flex flex-wrap gap-4 mb-3"></div>
+      <div class="chart-container" style="height:380px">
+        <canvas id="countsChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: Individual CSP Chart ===== -->
+  <div id="tab-csp-chart" class="tab-panel">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <h2 class="text-base font-semibold text-slate-700">Individual CSP Price History</h2>
+        <select id="csp-selector" class="border border-slate-300 rounded px-2 py-1.5 text-sm flex-1 max-w-md"></select>
+      </div>
+      <div id="csp-chart-meta" class="flex flex-wrap gap-4 mb-4 text-sm text-slate-600"></div>
+      <div class="chart-container" style="height:380px">
+        <canvas id="cspChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const D = window.PRICE_INDEX_DATA;
+
+// ─── Color palette ───────────────────────────────────────────────────────────
+const COLORS = {
+  topline:  '#1e3a5f',
+  vintage:  '#7c3aed',
+  fender:   '#ef4444',
+  gibson:   '#f59e0b',
+  prs:      '#3b82f6',
+  other:    '#10b981',
+};
+const GROUP_COLORS = { Fender: COLORS.fender, Gibson: COLORS.gibson, PRS: COLORS.prs, Other: COLORS.other, Vintage: COLORS.vintage };
+const SERIES_KEYS = ['topline','vintage','fender','gibson','prs','other'];
+const SERIES_LABELS = { topline:'Guitar Index', vintage:'Vintage', fender:'Fender', gibson:'Gibson', prs:'PRS', other:'Other' };
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+let activeTab = 'summary';
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = btn.dataset.tab;
+    document.getElementById('tab-' + activeTab).classList.add('active');
+    if (activeTab === 'index' && !indexChartBuilt) buildIndexChart();
+    if (activeTab === 'order-counts' && !countsChartBuilt) buildCountsChart();
+    if (activeTab === 'csp-chart' && !cspChartBuilt) buildCspChart();
+  });
+});
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fmtPct(v) {
+  if (v == null) return '—';
+  const s = (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+  return `<span class="${v >= 0 ? 'pct-pos' : 'pct-neg'}">${s}</span>`;
+}
+function fmtNum(v, dec=0) {
+  if (v == null) return '—';
+  return Number(v).toLocaleString('en-US', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function fmtDollar(v) {
+  if (v == null) return '—';
+  return '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+function slugToName(slug) {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+function groupBadge(g) {
+  return `<span class="group-badge group-${g}">${g}</span>`;
+}
+
+// ─── SUMMARY CHARTS ───────────────────────────────────────────────────────────
+
+// Group snapshot cards
+const groupCardsEl = document.getElementById('group-cards');
+const groupMeta = {
+  Fender: {color: COLORS.fender, emoji: '🎸'},
+  Gibson: {color: COLORS.gibson, emoji: '🎸'},
+  PRS:    {color: COLORS.prs,    emoji: '🎸'},
+  Other:  {color: COLORS.other,  emoji: '🎸'},
+  Vintage:{color: COLORS.vintage,emoji: '🎸'},
+};
+
+// Map groups to their annual index series
+const groupToSeries = {
+  'Fender': D.annual_indices.find(a => a.label === 'Fender Guitars'),
+  'Gibson': D.annual_indices.find(a => a.label === 'Gibson Guitars'),
+  'PRS':    D.annual_indices.find(a => a.label === 'PRS Guitars'),
+  'Other':  D.annual_indices.find(a => a.label === 'Other Brands'),
+  'Vintage':D.annual_indices.find(a => a.label === 'Vintage Guitars'),
+};
+
+D.group_table.forEach(g => {
+  const series = groupToSeries[g.group];
+  const latest = series ? series.series[series.series.length - 1] : null;
+  const color = groupMeta[g.group]?.color || '#888';
+  groupCardsEl.innerHTML += `
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4" style="border-left: 4px solid ${color}">
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide">${g.group} Guitars</div>
+          <div class="text-2xl font-bold text-slate-800 mt-1">${fmtNum(g.index_2024, 0)}</div>
+          <div class="text-xs text-slate-500">2024 Year-End Index</div>
+        </div>
+        <div class="text-right">
+          <div class="text-sm font-semibold ${g.yoy_2024 >= 0 ? 'text-green-600' : 'text-red-600'}">${g.yoy_2024 >= 0 ? '+' : ''}${g.yoy_2024?.toFixed(1)}%</div>
+          <div class="text-xs text-slate-400">Y/Y</div>
+          <div class="text-xs text-slate-400 mt-1">${g.weight}% weight</div>
+        </div>
+      </div>
+    </div>`;
+});
+
+// Annual Chart
+const annualLabels = D.annual_indices[0].series.map(s => s.year);
+const annualDatasets = [
+  { key: 'Guitar Index',    color: COLORS.topline },
+  { key: 'Vintage Guitars', color: COLORS.vintage },
+  { key: 'Fender Guitars',  color: COLORS.fender },
+  { key: 'Gibson Guitars',  color: COLORS.gibson },
+  { key: 'PRS Guitars',     color: COLORS.prs },
+  { key: 'Other Brands',    color: COLORS.other },
+];
+
+const annualChart = new Chart(document.getElementById('annualChart'), {
+  type: 'line',
+  data: {
+    labels: annualLabels,
+    datasets: annualDatasets.map(d => {
+      const ai = D.annual_indices.find(a => a.label === d.key);
+      return {
+        label: d.key.replace(' Guitars','').replace(' Brands',''),
+        data: ai.series.map(s => s.index),
+        borderColor: d.color,
+        backgroundColor: d.color + '18',
+        borderWidth: 2,
+        pointRadius: 4,
+        tension: 0.2,
+        fill: false,
+      };
+    }),
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+    scales: {
+      x: { grid: { color: '#f1f5f9' } },
+      y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => v.toLocaleString() } },
+    },
+  },
+});
+
+// Custom legend for annual chart
+const annualLegendEl = document.getElementById('annualLegend');
+annualDatasets.forEach((d, i) => {
+  const label = d.key.replace(' Guitars','').replace(' Brands','');
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.innerHTML = `<div class="legend-dot" style="background:${d.color}"></div><span>${label}</span>`;
+  item.addEventListener('click', () => {
+    const meta = annualChart.getDatasetMeta(i);
+    meta.hidden = !meta.hidden;
+    item.classList.toggle('hidden-series', meta.hidden);
+    annualChart.update();
+  });
+  annualLegendEl.appendChild(item);
+});
+
+// Group table
+const groupTableBody = document.getElementById('groupTableBody');
+D.group_table.forEach(g => {
+  const color = GROUP_COLORS[g.group] || '#888';
+  groupTableBody.innerHTML += `
+    <tr class="border-t border-slate-100 hover:bg-slate-50">
+      <td class="px-4 py-2">${groupBadge(g.group)}</td>
+      <td class="px-4 py-2 text-right font-semibold">${fmtNum(g.index_2024, 0)}</td>
+      <td class="px-4 py-2 text-right">${fmtPct(g.yoy_2024)}</td>
+      <td class="px-4 py-2 text-right">${g.weight}%</td>
+      <td class="px-4 py-2 text-right">${g.csp_count}</td>
+      <td class="px-4 py-2 text-right">${g.csp_pct}%</td>
+    </tr>`;
+});
+
+// Annual data tables
+const annualTablesEl = document.getElementById('annualTables');
+D.annual_indices.forEach(ai => {
+  const div = document.createElement('div');
+  div.className = 'bg-white rounded-xl shadow-sm border border-slate-200 p-4';
+  const shortLabel = ai.label.replace(' Guitars','').replace(' Brands','').replace(' Index','');
+  div.innerHTML = `
+    <h3 class="text-sm font-semibold text-slate-700 mb-2">${ai.label}</h3>
+    <table class="w-full text-xs">
+      <thead><tr class="text-slate-500 border-b border-slate-100">
+        <th class="py-1 text-left">Year</th>
+        <th class="py-1 text-right">Index</th>
+        <th class="py-1 text-right">Y/Y</th>
+        <th class="py-1 text-right">vs 2019</th>
+      </tr></thead>
+      <tbody>
+        ${ai.series.map(s => `
+          <tr class="border-b border-slate-50 hover:bg-slate-50">
+            <td class="py-1 font-medium">${s.year}</td>
+            <td class="py-1 text-right font-semibold">${fmtNum(s.index, 0)}</td>
+            <td class="py-1 text-right">${s.yoy != null ? fmtPct(s.yoy) : '—'}</td>
+            <td class="py-1 text-right">${s.vs2019 != null ? fmtPct(s.vs2019) : '—'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  annualTablesEl.appendChild(div);
+});
+
+// ─── CSP MEMBERSHIP ───────────────────────────────────────────────────────────
+let membershipSortCol = 'weight';
+let membershipSortDir = 'desc';
+let membershipFilter = '';
+let membershipGroupFilter = '';
+
+function renderMembership() {
+  let rows = [...D.csp_membership];
+  if (membershipFilter) {
+    const q = membershipFilter.toLowerCase();
+    rows = rows.filter(r => r.slug.includes(q) || slugToName(r.slug).toLowerCase().includes(q));
+  }
+  if (membershipGroupFilter) rows = rows.filter(r => r.group === membershipGroupFilter);
+  rows.sort((a, b) => {
+    const av = a[membershipSortCol], bv = b[membershipSortCol];
+    if (av == null) return 1; if (bv == null) return -1;
+    if (typeof av === 'string') return membershipSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return membershipSortDir === 'asc' ? av - bv : bv - av;
+  });
+  document.getElementById('membership-count').textContent = `Showing ${rows.length} of ${D.csp_membership.length} models`;
+  const tbody = document.getElementById('membershipBody');
+  tbody.innerHTML = rows.map(r => `
+    <tr class="border-t border-slate-100 hover:bg-slate-50">
+      <td class="px-4 py-2">
+        <a href="https://reverb.com/p/${r.slug}" target="_blank" class="csp-link">${slugToName(r.slug)}</a>
+      </td>
+      <td class="px-4 py-2 text-right text-slate-600">${r.weight_pct?.toFixed(2)}%</td>
+      <td class="px-4 py-2">${groupBadge(r.group)}</td>
+    </tr>`).join('');
+  // Update sort indicators
+  document.querySelectorAll('#membershipTable th.sortable').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.col === membershipSortCol) th.classList.add(membershipSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
+renderMembership();
+
+document.getElementById('csp-search').addEventListener('input', e => { membershipFilter = e.target.value; renderMembership(); });
+document.getElementById('csp-group-filter').addEventListener('change', e => { membershipGroupFilter = e.target.value; renderMembership(); });
+document.querySelectorAll('#membershipTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    if (membershipSortCol === th.dataset.col) membershipSortDir = membershipSortDir === 'asc' ? 'desc' : 'asc';
+    else { membershipSortCol = th.dataset.col; membershipSortDir = th.dataset.col === 'weight' ? 'desc' : 'asc'; }
+    renderMembership();
+  });
+});
+
+// ─── WEEKLY INDEX CHART ───────────────────────────────────────────────────────
+let indexChartBuilt = false;
+let indexChartInstance = null;
+let indexRange = 'all';
+const visibleSeries = { topline:true, vintage:true, fender:true, gibson:true, prs:true, other:true };
+
+function setIndexRange(r) {
+  indexRange = r;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  if (indexChartInstance) updateIndexChart();
+}
+
+function getFilteredWeekly(data, range) {
+  if (range === 'all') return data;
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - (range === '3y' ? 3 : 1));
+  return data.filter(d => new Date(d.date) >= cutoff);
+}
+
+function buildIndexChart() {
+  indexChartBuilt = true;
+  const legendEl = document.getElementById('indexLegend');
+  SERIES_KEYS.forEach(k => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.dataset.key = k;
+    item.innerHTML = `<div class="legend-dot" style="background:${COLORS[k]}"></div><span>${SERIES_LABELS[k]}</span>`;
+    item.addEventListener('click', () => {
+      visibleSeries[k] = !visibleSeries[k];
+      item.classList.toggle('hidden-series', !visibleSeries[k]);
+      updateIndexChart();
+    });
+    legendEl.appendChild(item);
+  });
+  indexChartInstance = new Chart(document.getElementById('indexChart'), {
+    type: 'line',
+    data: buildIndexChartData(),
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false,
+        callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('en-US',{maximumFractionDigits:0})}` }
+      }},
+      scales: {
+        x: { grid: { color: '#f1f5f9' }, ticks: { maxTicksLimit: 12 } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => v.toLocaleString() } },
+      },
+    },
+  });
+}
+
+function buildIndexChartData() {
+  const filtered = getFilteredWeekly(D.weekly_index, indexRange);
+  return {
+    labels: filtered.map(d => d.date),
+    datasets: SERIES_KEYS.map(k => ({
+      label: SERIES_LABELS[k],
+      data: filtered.map(d => d[k]),
+      borderColor: COLORS[k],
+      backgroundColor: COLORS[k] + '10',
+      borderWidth: k === 'topline' ? 2.5 : 1.5,
+      pointRadius: 0,
+      tension: 0.1,
+      hidden: !visibleSeries[k],
+    })),
+  };
+}
+
+function updateIndexChart() {
+  const filtered = getFilteredWeekly(D.weekly_index, indexRange);
+  indexChartInstance.data.labels = filtered.map(d => d.date);
+  SERIES_KEYS.forEach((k, i) => {
+    indexChartInstance.data.datasets[i].data = filtered.map(d => d[k]);
+    indexChartInstance.data.datasets[i].hidden = !visibleSeries[k];
+  });
+  indexChartInstance.update();
+}
+
+// ─── TTM PRICE MOVEMENTS ──────────────────────────────────────────────────────
+function buildTtmTable(periodKey, tabDivId) {
+  const movement = D.ttm_movements.find(m => {
+    if (periodKey === 'q1-2026') return m.period === 'Q1 2026';
+    if (periodKey === 'q4-2025') return m.period === 'Q4 2025';
+    if (periodKey === 'q3-2025') return m.period === 'Q3 2025';
+  });
+  if (!movement) return;
+
+  let sortCol = 'pct_ttm', sortDir = 'desc', groupFilter = '', searchFilter = '';
+  const containerId = `ttm-${periodKey}-content`;
+
+  const container = document.getElementById(containerId);
+  container.innerHTML = `
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-700">TTM Price Movements — ${movement.period}</h2>
+          <p class="text-xs text-slate-500">Prices: ${movement.date_a} → ${movement.date_b} · Sorted by TTM % change</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <input type="text" placeholder="Search…" class="border border-slate-300 rounded px-2 py-1.5 text-sm w-40" id="ttm-search-${periodKey}">
+          <select class="border border-slate-300 rounded px-2 py-1.5 text-sm" id="ttm-group-${periodKey}">
+            <option value="">All Groups</option>
+            <option>Fender</option><option>Gibson</option><option>PRS</option><option>Other</option><option>Vintage</option>
+          </select>
+        </div>
+      </div>
+      <div class="scrollable-table">
+        <table class="w-full text-xs" id="ttm-table-${periodKey}">
+          <thead>
+            <tr class="bg-slate-50 text-slate-600 text-left">
+              <th class="sortable px-3 py-2 font-semibold" data-col="slug">Model</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="group">Group</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="aov_2019">2019 AOV</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="price_a">${movement.date_a}</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="price_b">${movement.date_b}</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="pct_ttm">TTM %</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="pct_2019">vs 2019</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="avg_orders">Avg Orders</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="weight">Weight</th>
+            </tr>
+          </thead>
+          <tbody id="ttm-body-${periodKey}"></tbody>
+        </table>
+      </div>
+      <div class="text-xs text-slate-400 mt-2" id="ttm-count-${periodKey}"></div>
+    </div>`;
+
+  function renderTtm() {
+    let rows = [...movement.rows];
+    if (searchFilter) {
+      const q = searchFilter.toLowerCase();
+      rows = rows.filter(r => r.slug.includes(q) || slugToName(r.slug).toLowerCase().includes(q));
+    }
+    if (groupFilter) rows = rows.filter(r => r.group === groupFilter);
+    rows.sort((a, b) => {
+      const av = a[sortCol], bv = b[sortCol];
+      if (av == null) return 1; if (bv == null) return -1;
+      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === 'asc' ? av - bv : bv - av;
+    });
+    document.getElementById(`ttm-count-${periodKey}`).textContent = `Showing ${rows.length} of ${movement.rows.length} models`;
+    document.getElementById(`ttm-body-${periodKey}`).innerHTML = rows.map(r => `
+      <tr class="border-t border-slate-100 hover:bg-slate-50">
+        <td class="px-3 py-1.5">
+          <a href="${r.link}" target="_blank" class="csp-link">${slugToName(r.slug)}</a>
+          ${r.notes ? `<div class="text-slate-400 mt-0.5" style="font-size:0.7rem">${r.notes}</div>` : ''}
+        </td>
+        <td class="px-3 py-1.5 text-right">${groupBadge(r.group)}</td>
+        <td class="px-3 py-1.5 text-right text-slate-600">${fmtDollar(r.aov_2019)}</td>
+        <td class="px-3 py-1.5 text-right text-slate-600">${fmtDollar(r.price_a)}</td>
+        <td class="px-3 py-1.5 text-right font-medium">${fmtDollar(r.price_b)}</td>
+        <td class="px-3 py-1.5 text-right">${fmtPct(r.pct_ttm)}</td>
+        <td class="px-3 py-1.5 text-right">${fmtPct(r.pct_2019)}</td>
+        <td class="px-3 py-1.5 text-right text-slate-600">${r.avg_orders?.toFixed(1) ?? '—'}</td>
+        <td class="px-3 py-1.5 text-right text-slate-500">${r.weight?.toFixed(2)}%</td>
+      </tr>`).join('');
+    // Update sort indicators
+    document.querySelectorAll(`#ttm-table-${periodKey} th.sortable`).forEach(th => {
+      th.classList.remove('sort-asc','sort-desc');
+      if (th.dataset.col === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    });
+  }
+
+  renderTtm();
+
+  document.getElementById(`ttm-search-${periodKey}`).addEventListener('input', e => { searchFilter = e.target.value; renderTtm(); });
+  document.getElementById(`ttm-group-${periodKey}`).addEventListener('change', e => { groupFilter = e.target.value; renderTtm(); });
+  document.querySelectorAll(`#ttm-table-${periodKey} th.sortable`).forEach(th => {
+    th.addEventListener('click', () => {
+      if (sortCol === th.dataset.col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      else { sortCol = th.dataset.col; sortDir = typeof movement.rows[0]?.[th.dataset.col] === 'string' ? 'asc' : 'desc'; }
+      renderTtm();
+    });
+  });
+}
+
+buildTtmTable('q1-2026', 'ttm-q1-2026-content');
+buildTtmTable('q4-2025', 'ttm-q4-2025-content');
+buildTtmTable('q3-2025', 'ttm-q3-2025-content');
+
+// ─── ORDER COUNTS CHART ───────────────────────────────────────────────────────
+let countsChartBuilt = false;
+let countsChartInstance = null;
+let countsRange = 'all';
+const visibleCounts = { topline:true, vintage:true, fender:true, gibson:true, prs:true, other:true };
+
+function setCountsRange(r) {
+  countsRange = r;
+  document.querySelectorAll('.counts-range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  if (countsChartInstance) updateCountsChart();
+}
+
+function buildCountsChart() {
+  countsChartBuilt = true;
+  const legendEl = document.getElementById('countsLegend');
+  SERIES_KEYS.forEach(k => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.dataset.key = k;
+    item.innerHTML = `<div class="legend-dot" style="background:${COLORS[k]}"></div><span>${SERIES_LABELS[k]}</span>`;
+    item.addEventListener('click', () => {
+      visibleCounts[k] = !visibleCounts[k];
+      item.classList.toggle('hidden-series', !visibleCounts[k]);
+      updateCountsChart();
+    });
+    legendEl.appendChild(item);
+  });
+  countsChartInstance = new Chart(document.getElementById('countsChart'), {
+    type: 'line',
+    data: buildCountsData(),
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { grid: { color: '#f1f5f9' }, ticks: { maxTicksLimit: 12 } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => v.toLocaleString() } },
+      },
+    },
+  });
+}
+
+function buildCountsData() {
+  const filtered = getFilteredWeekly(D.order_counts, countsRange);
+  return {
+    labels: filtered.map(d => d.date),
+    datasets: SERIES_KEYS.map(k => ({
+      label: SERIES_LABELS[k],
+      data: filtered.map(d => d[k]),
+      borderColor: COLORS[k],
+      backgroundColor: COLORS[k] + '18',
+      borderWidth: k === 'topline' ? 2.5 : 1.5,
+      pointRadius: 0,
+      tension: 0.1,
+      fill: k === 'topline',
+      hidden: !visibleCounts[k],
+    })),
+  };
+}
+
+function updateCountsChart() {
+  const filtered = getFilteredWeekly(D.order_counts, countsRange);
+  countsChartInstance.data.labels = filtered.map(d => d.date);
+  SERIES_KEYS.forEach((k, i) => {
+    countsChartInstance.data.datasets[i].data = filtered.map(d => d[k]);
+    countsChartInstance.data.datasets[i].hidden = !visibleCounts[k];
+  });
+  countsChartInstance.update();
+}
+
+// ─── INDIVIDUAL CSP CHART ─────────────────────────────────────────────────────
+let cspChartBuilt = false;
+let cspChartInstance = null;
+
+function buildCspChart() {
+  cspChartBuilt = true;
+  const sel = document.getElementById('csp-selector');
+  // Sort CSPs by weight descending
+  const sortedCSPs = [...D.csp_membership].sort((a, b) => (b.weight_pct||0) - (a.weight_pct||0));
+  sortedCSPs.forEach(csp => {
+    const opt = document.createElement('option');
+    opt.value = csp.slug;
+    opt.textContent = slugToName(csp.slug) + ` (${csp.group})`;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', () => renderCspChart(sel.value));
+  renderCspChart(sortedCSPs[0].slug);
+}
+
+function renderCspChart(slug) {
+  const weekly = D.all_csps_weekly[slug] || [];
+  const cspInfo = D.csp_membership.find(c => c.slug === slug);
+  const color = GROUP_COLORS[cspInfo?.group] || '#1e3a5f';
+
+  // Update meta
+  const metaEl = document.getElementById('csp-chart-meta');
+  const ttm = D.ttm_movements[2]?.rows.find(r => r.slug === slug);
+  metaEl.innerHTML = `
+    <div class="bg-slate-50 rounded-lg px-3 py-2"><div class="text-xs text-slate-500">Group</div><div class="font-semibold">${groupBadge(cspInfo?.group || '—')}</div></div>
+    <div class="bg-slate-50 rounded-lg px-3 py-2"><div class="text-xs text-slate-500">Index Weight</div><div class="font-semibold">${cspInfo?.weight_pct?.toFixed(2)}%</div></div>
+    ${ttm ? `
+    <div class="bg-slate-50 rounded-lg px-3 py-2"><div class="text-xs text-slate-500">2019 AOV</div><div class="font-semibold">${fmtDollar(ttm.aov_2019)}</div></div>
+    <div class="bg-slate-50 rounded-lg px-3 py-2"><div class="text-xs text-slate-500">Apr 2025</div><div class="font-semibold">${fmtDollar(ttm.price_a)}</div></div>
+    <div class="bg-slate-50 rounded-lg px-3 py-2"><div class="text-xs text-slate-500">Apr 2026</div><div class="font-semibold">${fmtDollar(ttm.price_b)}</div></div>
+    <div class="bg-slate-50 rounded-lg px-3 py-2"><div class="text-xs text-slate-500">TTM Change</div><div class="font-semibold">${fmtPct(ttm.pct_ttm)}</div></div>
+    ` : ''}
+    <a href="https://reverb.com/p/${slug}" target="_blank" class="bg-slate-50 rounded-lg px-3 py-2 flex items-center text-blue-600 text-sm hover:bg-blue-50">View on Reverb ↗</a>
+  `;
+
+  const labels = weekly.map(d => d.date);
+  const prices = weekly.map(d => d.price);
+
+  if (cspChartInstance) {
+    cspChartInstance.data.labels = labels;
+    cspChartInstance.data.datasets[0].data = prices;
+    cspChartInstance.data.datasets[0].borderColor = color;
+    cspChartInstance.data.datasets[0].backgroundColor = color + '15';
+    cspChartInstance.data.datasets[0].label = slugToName(slug);
+    cspChartInstance.update();
+  } else {
+    cspChartInstance = new Chart(document.getElementById('cspChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: slugToName(slug),
+          data: prices,
+          borderColor: color,
+          backgroundColor: color + '15',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: true,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y?.toFixed(0) || '—'}` } }
+        },
+        scales: {
+          x: { grid: { color: '#f1f5f9' }, ticks: { maxTicksLimit: 12 } },
+          y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v.toLocaleString() } },
+        },
+      },
+    });
+  }
+}
+
+// ─── Range button styles ──────────────────────────────────────────────────────
+document.querySelectorAll('.range-btn, .counts-range-btn').forEach(b => {
+  b.style.cssText = 'background:white; color:#475569;';
+});
+document.querySelectorAll('.range-btn.active, .counts-range-btn.active').forEach(b => {
+  b.style.cssText = 'background:#1e3a5f; color:white;';
+});
+// Override the inline styles with event listeners
+['range-btn', 'counts-range-btn'].forEach(cls => {
+  document.querySelectorAll('.' + cls).forEach(b => {
+    b.classList.add('border-slate-300', 'font-medium');
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.' + cls).forEach(bb => {
+        bb.classList.remove('bg-[#1e3a5f]', 'text-white', 'border-[#1e3a5f]');
+        bb.classList.add('bg-white', 'text-slate-600');
+      });
+      b.classList.add('bg-[#1e3a5f]', 'text-white', 'border-[#1e3a5f]');
+      b.classList.remove('bg-white', 'text-slate-600');
+    });
+  });
+  // Init active
+  const active = document.querySelector('.' + cls + '.active');
+  if (active) {
+    active.classList.add('bg-[#1e3a5f]', 'text-white', 'border-[#1e3a5f]');
+    active.classList.remove('bg-white', 'text-slate-600');
+  }
+});
+</script>
+</body>
+</html>
