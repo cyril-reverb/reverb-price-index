@@ -54,6 +54,9 @@
     #csp-search { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; font-size: 0.875rem; }
     .csp-link { color: #2563eb; text-decoration: none; font-size: 0.8rem; }
     .csp-link:hover { text-decoration: underline; }
+    .index-view-btn { transition: all 0.15s; border: none; cursor: pointer; background: transparent; color: #64748b; }
+    .index-view-btn.active { background: #1a1a1a; color: white; border-radius: 5px; }
+    .index-view-btn:not(.active):hover { background: #e2e8f0; border-radius: 5px; }
   </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -138,10 +141,19 @@
           <h2 class="text-base font-semibold text-slate-700">Weekly Price Index</h2>
           <p class="text-xs text-slate-500">Click legend items to toggle series</p>
         </div>
-        <div class="flex gap-2">
-          <button onclick="setIndexRange('all')" class="range-btn active text-xs px-3 py-1.5 rounded border" data-range="all">All</button>
-          <button onclick="setIndexRange('3y')" class="range-btn text-xs px-3 py-1.5 rounded border" data-range="3y">3Y</button>
-          <button onclick="setIndexRange('1y')" class="range-btn text-xs px-3 py-1.5 rounded border" data-range="1y">1Y</button>
+        <div class="flex flex-wrap items-center gap-3">
+          <div id="index-view-toggle" style="display:none" class="flex items-center gap-1.5">
+            <span class="text-xs text-slate-400 font-medium">View by:</span>
+            <div class="flex gap-0.5 p-0.5 bg-slate-100 rounded-md">
+              <button class="index-view-btn active text-xs px-3 py-1" data-mode="group">Group</button>
+              <button class="index-view-btn text-xs px-3 py-1" data-mode="subcategory">Subcategory</button>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="setIndexRange('all')" class="range-btn active text-xs px-3 py-1.5 rounded border" data-range="all">All</button>
+            <button onclick="setIndexRange('3y')" class="range-btn text-xs px-3 py-1.5 rounded border" data-range="3y">3Y</button>
+            <button onclick="setIndexRange('1y')" class="range-btn text-xs px-3 py-1.5 rounded border" data-range="1y">1Y</button>
+          </div>
         </div>
       </div>
       <div id="indexLegend" class="flex flex-wrap gap-4 mb-3"></div>
@@ -288,7 +300,9 @@ let annualChartInstance = null;
 let indexChartBuilt = false;
 let indexChartInstance = null;
 let indexRange = 'all';
+let indexViewMode = 'group';
 let visibleSeries = {};
+let subcatIndexCache = null;
 let cspChartBuilt = false;
 let cspChartInstance = null;
 let currentTtmPeriod = 'q1-2026';
@@ -349,7 +363,9 @@ function switchCategory(cat) {
   // Destroy charts
   if (indexChartInstance) { indexChartInstance.destroy(); indexChartInstance = null; }
   indexChartBuilt = false;
+  indexViewMode = 'group';
   visibleSeries = {};
+  subcatIndexCache = null;
   document.getElementById('indexLegend').innerHTML = '';
   if (cspChartInstance) { cspChartInstance.destroy(); cspChartInstance = null; }
   cspChartBuilt = false;
@@ -538,6 +554,121 @@ document.querySelectorAll('#membershipTable th.sortable').forEach(th => {
 });
 
 // ─── WEEKLY INDEX CHART ───────────────────────────────────────────────────────
+const SUBCAT_COLORS = ['#3b82f6','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#10b981','#f97316','#6366f1'];
+
+function computeSubcatIndex() {
+  if (subcatIndexCache) return subcatIndexCache;
+  const D = CAT.data;
+  const dates = D.weekly_index.map(d => d.date);
+
+  // Build date→price lookup per CSP
+  const lookup = {};
+  D.csp_membership.forEach(csp => {
+    lookup[csp.slug] = {};
+    (D.all_csps_weekly[csp.slug] || []).forEach(d => { lookup[csp.slug][d.date] = d.price; });
+  });
+
+  // Group CSPs by subcategory
+  const subcatMap = {};
+  D.csp_membership.forEach(csp => {
+    const s = csp.subcategory;
+    if (!s) return;
+    if (!subcatMap[s]) subcatMap[s] = { csps: [], totalWeight: 0 };
+    subcatMap[s].csps.push(csp);
+    subcatMap[s].totalWeight += csp.weight_pct || 0;
+  });
+
+  // Take top 8 subcategories by total index weight
+  const topSubcats = Object.entries(subcatMap)
+    .sort((a, b) => b[1].totalWeight - a[1].totalWeight)
+    .slice(0, 8)
+    .map(([k]) => k);
+
+  // Compute weekly weighted-avg price, then index to 1000 at first date
+  const result = {};
+  topSubcats.forEach(subcat => {
+    const { csps } = subcatMap[subcat];
+    const series = dates.map(date => {
+      let wSum = 0, wTotal = 0;
+      csps.forEach(csp => {
+        const price = lookup[csp.slug]?.[date];
+        if (price) { wSum += price * (csp.weight_pct || 0); wTotal += csp.weight_pct || 0; }
+      });
+      return wTotal > 0 ? wSum / wTotal : null;
+    });
+    const base = series.find(v => v != null);
+    if (!base) return;
+    result[subcat] = dates.map((date, i) => ({ date, value: series[i] != null ? (series[i] / base) * 1000 : null }));
+  });
+
+  subcatIndexCache = result;
+  return result;
+}
+
+function buildSubcatChartData() {
+  const subcatIndex = computeSubcatIndex();
+  const cutoff = indexRange === 'all' ? null : (() => { const c = new Date(); c.setFullYear(c.getFullYear() - (indexRange === '3y' ? 3 : 1)); return c; })();
+  const allDates = CAT.data.weekly_index.map(d => d.date);
+  const filteredDates = cutoff ? allDates.filter(d => new Date(d) >= cutoff) : allDates;
+
+  return {
+    labels: filteredDates,
+    datasets: Object.entries(subcatIndex).map(([subcat, series], i) => {
+      const color = SUBCAT_COLORS[i % SUBCAT_COLORS.length];
+      const label = subcat.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const dataMap = Object.fromEntries(series.map(d => [d.date, d.value]));
+      return { label, data: filteredDates.map(d => dataMap[d] ?? null), borderColor: color, backgroundColor: color + '10', borderWidth: 1.5, pointRadius: 0, tension: 0.1 };
+    }),
+  };
+}
+
+function rebuildIndexLegend() {
+  const legendEl = document.getElementById('indexLegend');
+  legendEl.innerHTML = '';
+  if (indexViewMode === 'subcategory') {
+    const subcatIndex = computeSubcatIndex();
+    Object.keys(subcatIndex).forEach((subcat, i) => {
+      const color = SUBCAT_COLORS[i % SUBCAT_COLORS.length];
+      const label = subcat.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `<div class="legend-dot" style="background:${color}"></div><span>${label}</span>`;
+      item.addEventListener('click', () => {
+        const ds = indexChartInstance?.data.datasets[i];
+        if (!ds) return;
+        ds.hidden = !ds.hidden;
+        item.classList.toggle('hidden-series', ds.hidden);
+        indexChartInstance.update();
+      });
+      legendEl.appendChild(item);
+    });
+  } else {
+    CAT.seriesKeys.forEach(k => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `<div class="legend-dot" style="background:${CAT.colors[k]}"></div><span>${CAT.seriesLabels[k]}</span>`;
+      if (!visibleSeries[k]) item.classList.add('hidden-series');
+      item.addEventListener('click', () => {
+        visibleSeries[k] = !visibleSeries[k];
+        item.classList.toggle('hidden-series', !visibleSeries[k]);
+        updateIndexChart();
+      });
+      legendEl.appendChild(item);
+    });
+  }
+}
+
+function setIndexViewMode(mode) {
+  indexViewMode = mode;
+  document.querySelectorAll('.index-view-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  if (!indexChartInstance) return;
+  const newData = mode === 'subcategory' ? buildSubcatChartData() : buildIndexChartData();
+  indexChartInstance.data.labels = newData.labels;
+  indexChartInstance.data.datasets = newData.datasets;
+  indexChartInstance.update();
+  rebuildIndexLegend();
+}
+
 function setIndexRange(r) {
   indexRange = r;
   document.querySelectorAll('.range-btn').forEach(b => { b.classList.toggle('active', b.dataset.range === r); styleRangeBtn(b); });
@@ -547,19 +678,17 @@ function setIndexRange(r) {
 function buildIndexChart() {
   indexChartBuilt = true;
   D = CAT.data;
+  indexViewMode = 'group';
+  subcatIndexCache = null;
   CAT.seriesKeys.forEach(k => { visibleSeries[k] = true; });
-  document.getElementById('indexLegend').innerHTML = '';
-  CAT.seriesKeys.forEach(k => {
-    const item = document.createElement('div');
-    item.className = 'legend-item';
-    item.innerHTML = `<div class="legend-dot" style="background:${CAT.colors[k]}"></div><span>${CAT.seriesLabels[k]}</span>`;
-    item.addEventListener('click', () => {
-      visibleSeries[k] = !visibleSeries[k];
-      item.classList.toggle('hidden-series', !visibleSeries[k]);
-      updateIndexChart();
-    });
-    document.getElementById('indexLegend').appendChild(item);
-  });
+
+  // Show/hide subcategory toggle
+  const toggleEl = document.getElementById('index-view-toggle');
+  toggleEl.style.display = currentCat === 'pedals' ? '' : 'none';
+  document.querySelectorAll('.index-view-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'group'));
+
+  rebuildIndexLegend();
+
   indexChartInstance = new Chart(document.getElementById('indexChart'), {
     type: 'line',
     data: buildIndexChartData(),
@@ -573,6 +702,10 @@ function buildIndexChart() {
         y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => v.toLocaleString() } },
       },
     },
+  });
+
+  document.querySelectorAll('.index-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => setIndexViewMode(btn.dataset.mode));
   });
 }
 
@@ -593,6 +726,13 @@ function buildIndexChartData() {
 }
 
 function updateIndexChart() {
+  if (indexViewMode === 'subcategory') {
+    const newData = buildSubcatChartData();
+    indexChartInstance.data.labels = newData.labels;
+    indexChartInstance.data.datasets = newData.datasets;
+    indexChartInstance.update();
+    return;
+  }
   const filtered = getFilteredWeekly(D.weekly_index, indexRange);
   indexChartInstance.data.labels = filtered.map(d => d.date);
   CAT.seriesKeys.forEach((k, i) => {
