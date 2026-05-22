@@ -98,14 +98,14 @@
 
     <!-- Group comparison table -->
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-      <h2 class="text-base font-semibold text-slate-700 mb-3">2024 Group Summary</h2>
+      <h2 class="text-base font-semibold text-slate-700 mb-3">2025 Group Summary</h2>
       <div class="scrollable-table">
         <table class="w-full text-sm">
           <thead>
             <tr class="bg-slate-50 text-slate-600 text-left">
               <th class="px-4 py-2 font-semibold">Group</th>
-              <th class="px-4 py-2 font-semibold text-right">2024 YE Index</th>
-              <th class="px-4 py-2 font-semibold text-right">2024 Y/Y</th>
+              <th class="px-4 py-2 font-semibold text-right">2025 YE Index</th>
+              <th class="px-4 py-2 font-semibold text-right">2025 Y/Y</th>
               <th class="px-4 py-2 font-semibold text-right">Index Weight</th>
               <th class="px-4 py-2 font-semibold text-right">CSP Count</th>
               <th class="px-4 py-2 font-semibold text-right">CSP %</th>
@@ -311,11 +311,11 @@ D.group_table.forEach(g => {
       <div class="flex justify-between items-start">
         <div>
           <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide">${g.group} Guitars</div>
-          <div class="text-2xl font-bold text-slate-800 mt-1">${fmtNum(g.index_2024, 0)}</div>
-          <div class="text-xs text-slate-500">2024 Year-End Index</div>
+          <div class="text-2xl font-bold text-slate-800 mt-1">${fmtNum(latest?.index, 0)}</div>
+          <div class="text-xs text-slate-500">2025 Year-End Index</div>
         </div>
         <div class="text-right">
-          <div class="text-sm font-semibold ${g.yoy_2024 >= 0 ? 'text-green-600' : 'text-red-600'}">${g.yoy_2024 >= 0 ? '+' : ''}${g.yoy_2024?.toFixed(1)}%</div>
+          <div class="text-sm font-semibold ${(latest?.yoy ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}">${(latest?.yoy ?? 0) >= 0 ? '+' : ''}${latest?.yoy?.toFixed(1)}%</div>
           <div class="text-xs text-slate-400">Y/Y</div>
           <div class="text-xs text-slate-400 mt-1">${g.weight}% weight</div>
         </div>
@@ -381,12 +381,13 @@ annualDatasets.forEach((d, i) => {
 // Group table
 const groupTableBody = document.getElementById('groupTableBody');
 D.group_table.forEach(g => {
+  const s2025 = groupToSeries[g.group]?.series.at(-1);
   const color = GROUP_COLORS[g.group] || '#888';
   groupTableBody.innerHTML += `
     <tr class="border-t border-slate-100 hover:bg-slate-50">
       <td class="px-4 py-2">${groupBadge(g.group)}</td>
-      <td class="px-4 py-2 text-right font-semibold">${fmtNum(g.index_2024, 0)}</td>
-      <td class="px-4 py-2 text-right">${fmtPct(g.yoy_2024)}</td>
+      <td class="px-4 py-2 text-right font-semibold">${fmtNum(s2025?.index, 0)}</td>
+      <td class="px-4 py-2 text-right">${fmtPct(s2025?.yoy)}</td>
       <td class="px-4 py-2 text-right">${g.weight}%</td>
       <td class="px-4 py-2 text-right">${g.csp_count}</td>
       <td class="px-4 py-2 text-right">${g.csp_pct}%</td>
