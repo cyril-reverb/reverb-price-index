@@ -89,9 +89,7 @@
     <div class="flex overflow-x-auto gap-0.5 py-2" id="tab-nav">
       <button class="tab-btn active px-4 py-2 rounded text-sm font-medium" data-tab="summary">Summary Charts</button>
       <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="index">Index</button>
-      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm-q1-2026">TTM Q1 2026</button>
-      <button class="tab-btn px-4 py-2 rounded text-sm font-medium guitar-only" data-tab="ttm-q4-2025">TTM Q4 2025</button>
-      <button class="tab-btn px-4 py-2 rounded text-sm font-medium guitar-only" data-tab="ttm-q3-2025">TTM Q3 2025</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm">TTM Movements</button>
       <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="csp-chart">Individual CSP</button>
       <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="membership">CSP Membership</button>
     </div>
@@ -151,14 +149,8 @@
     </div>
   </div>
 
-  <!-- ===== TAB: TTM Q1 2026 ===== -->
-  <div id="tab-ttm-q1-2026" class="tab-panel"><div id="ttm-q1-2026-content"></div></div>
-
-  <!-- ===== TAB: TTM Q4 2025 ===== -->
-  <div id="tab-ttm-q4-2025" class="tab-panel"><div id="ttm-q4-2025-content"></div></div>
-
-  <!-- ===== TAB: TTM Q3 2025 ===== -->
-  <div id="tab-ttm-q3-2025" class="tab-panel"><div id="ttm-q3-2025-content"></div></div>
+  <!-- ===== TAB: TTM Movements ===== -->
+  <div id="tab-ttm" class="tab-panel"><div id="ttm-content"></div></div>
 
   <!-- ===== TAB: Individual CSP Chart ===== -->
   <div id="tab-csp-chart" class="tab-panel">
@@ -299,6 +291,7 @@ let indexRange = 'all';
 let visibleSeries = {};
 let cspChartBuilt = false;
 let cspChartInstance = null;
+let currentTtmPeriod = 'q1-2026';
 let membershipSortCol = 'weight_pct';
 let membershipSortDir = 'desc';
 let membershipFilter = '';
@@ -339,15 +332,6 @@ function switchCategory(cat) {
   document.getElementById('header-subtitle').textContent = CAT.subtitle;
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
 
-  document.querySelectorAll('.guitar-only').forEach(el => {
-    el.style.display = cat === 'guitars' ? '' : 'none';
-  });
-
-  if ((activeTab === 'ttm-q4-2025' || activeTab === 'ttm-q3-2025') && cat === 'pedals') {
-    switchTab('summary');
-    return; // switchTab will call the rest via re-render
-  }
-
   // Reset membership state
   membershipFilter = '';
   membershipGroupFilter = '';
@@ -372,13 +356,10 @@ function switchCategory(cat) {
   document.getElementById('csp-selector').innerHTML = '';
   document.getElementById('csp-chart-meta').innerHTML = '';
 
+  currentTtmPeriod = 'q1-2026';
   renderSummary();
   renderMembership();
   buildTtmTable('q1-2026');
-  if (cat === 'guitars') {
-    buildTtmTable('q4-2025');
-    buildTtmTable('q3-2025');
-  }
   if (activeTab === 'index') buildIndexChart();
   if (activeTab === 'csp-chart') buildCspChart();
 }
@@ -624,29 +605,43 @@ function updateIndexChart() {
 // ─── TTM PRICE MOVEMENTS ──────────────────────────────────────────────────────
 function buildTtmTable(periodKey) {
   D = CAT.data;
+  currentTtmPeriod = periodKey;
   const periodLabel = periodKey === 'q1-2026' ? 'Q1 2026' : periodKey === 'q4-2025' ? 'Q4 2025' : 'Q3 2025';
   const movement = D.ttm_movements.find(m => m.period === periodLabel);
   if (!movement) return;
 
   let sortCol = 'pct_ttm', sortDir = 'desc', groupFilter = '', searchFilter = '';
-  const container = document.getElementById(`ttm-${periodKey}-content`);
+  const container = document.getElementById('ttm-content');
+
+  // Build period options from CAT config
+  const periodOptions = CAT.ttmPeriodKeys.map(k => {
+    const lbl = k === 'q1-2026' ? 'Q1 2026' : k === 'q4-2025' ? 'Q4 2025' : 'Q3 2025';
+    return `<option value="${k}" ${k === periodKey ? 'selected' : ''}>${lbl}</option>`;
+  }).join('');
+
   container.innerHTML = `
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
-          <h2 class="text-base font-semibold text-slate-700">TTM Price Movements — ${movement.period}</h2>
-          <p class="text-xs text-slate-500">Prices: ${movement.date_a} → ${movement.date_b} · Sorted by TTM % change</p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <h2 class="text-base font-semibold text-slate-700">TTM Price Movements</h2>
+            ${CAT.ttmPeriodKeys.length > 1 ? `
+            <select id="ttm-period-select" class="border border-slate-300 rounded px-2 py-1.5 text-sm font-medium bg-white">
+              ${periodOptions}
+            </select>` : `<span class="text-sm text-slate-500 font-medium">${movement.period}</span>`}
+          </div>
+          <p class="text-xs text-slate-500 mt-1">Prices: ${movement.date_a} → ${movement.date_b}</p>
         </div>
         <div class="flex gap-2 flex-wrap">
-          <input type="text" placeholder="Search…" class="border border-slate-300 rounded px-2 py-1.5 text-sm w-40" id="ttm-search-${periodKey}">
-          <select class="border border-slate-300 rounded px-2 py-1.5 text-sm" id="ttm-group-${periodKey}">
+          <input type="text" placeholder="Search…" class="border border-slate-300 rounded px-2 py-1.5 text-sm w-40" id="ttm-search">
+          <select class="border border-slate-300 rounded px-2 py-1.5 text-sm" id="ttm-group">
             <option value="">All Groups</option>
             ${CAT.groupOptions.map(g => `<option value="${g}">${g}</option>`).join('')}
           </select>
         </div>
       </div>
       <div class="scrollable-table">
-        <table class="w-full text-xs" id="ttm-table-${periodKey}">
+        <table class="w-full text-xs" id="ttm-table">
           <thead>
             <tr class="bg-slate-50 text-slate-600 text-left">
               <th class="sortable px-3 py-2 font-semibold" data-col="slug">Model</th>
@@ -660,10 +655,10 @@ function buildTtmTable(periodKey) {
               <th class="sortable px-3 py-2 font-semibold text-right" data-col="weight">Weight</th>
             </tr>
           </thead>
-          <tbody id="ttm-body-${periodKey}"></tbody>
+          <tbody id="ttm-body"></tbody>
         </table>
       </div>
-      <div class="text-xs text-slate-400 mt-2" id="ttm-count-${periodKey}"></div>
+      <div class="text-xs text-slate-400 mt-2" id="ttm-count"></div>
     </div>`;
 
   function renderTtm() {
@@ -680,8 +675,8 @@ function buildTtmTable(periodKey) {
       return sortDir === 'asc' ? av - bv : bv - av;
     });
     const total = movement.rows.filter(r => r.slug).length;
-    document.getElementById(`ttm-count-${periodKey}`).textContent = `Showing ${rows.length} of ${total} models`;
-    document.getElementById(`ttm-body-${periodKey}`).innerHTML = rows.map(r => `
+    document.getElementById('ttm-count').textContent = `Showing ${rows.length} of ${total} models`;
+    document.getElementById('ttm-body').innerHTML = rows.map(r => `
       <tr class="border-t border-slate-100 hover:bg-slate-50">
         <td class="px-3 py-1.5">
           <a href="${r.link}" target="_blank" class="csp-link">${slugToName(r.slug)}</a>
@@ -696,16 +691,17 @@ function buildTtmTable(periodKey) {
         <td class="px-3 py-1.5 text-right text-slate-600">${r.avg_orders?.toFixed(1) ?? '—'}</td>
         <td class="px-3 py-1.5 text-right text-slate-500">${r.weight?.toFixed(2)}%</td>
       </tr>`).join('');
-    document.querySelectorAll(`#ttm-table-${periodKey} th.sortable`).forEach(th => {
+    document.querySelectorAll('#ttm-table th.sortable').forEach(th => {
       th.classList.remove('sort-asc','sort-desc');
       if (th.dataset.col === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
     });
   }
 
   renderTtm();
-  document.getElementById(`ttm-search-${periodKey}`).addEventListener('input', e => { searchFilter = e.target.value; renderTtm(); });
-  document.getElementById(`ttm-group-${periodKey}`).addEventListener('change', e => { groupFilter = e.target.value; renderTtm(); });
-  document.querySelectorAll(`#ttm-table-${periodKey} th.sortable`).forEach(th => {
+  document.getElementById('ttm-period-select')?.addEventListener('change', e => buildTtmTable(e.target.value));
+  document.getElementById('ttm-search').addEventListener('input', e => { searchFilter = e.target.value; renderTtm(); });
+  document.getElementById('ttm-group').addEventListener('change', e => { groupFilter = e.target.value; renderTtm(); });
+  document.querySelectorAll('#ttm-table th.sortable').forEach(th => {
     th.addEventListener('click', () => {
       if (sortCol === th.dataset.col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
       else { sortCol = th.dataset.col; sortDir = typeof movement.rows[0]?.[th.dataset.col] === 'string' ? 'asc' : 'desc'; }
@@ -795,8 +791,6 @@ document.querySelectorAll('.range-btn').forEach(b => styleRangeBtn(b));
 renderSummary();
 renderMembership();
 buildTtmTable('q1-2026');
-buildTtmTable('q4-2025');
-buildTtmTable('q3-2025');
 </script>
 </body>
 </html>
