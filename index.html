@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="data.js"></script>
   <script src="data_pedals.js"></script>
+  <script src="data_keys.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@1,700&display=swap" rel="stylesheet">
   <style>
@@ -82,6 +83,7 @@
     <div class="flex gap-0.5 p-0.5 bg-white border border-slate-200 rounded-lg">
       <button class="cat-btn active px-4 py-1.5 rounded-md text-sm font-medium" data-cat="guitars">Electric Guitars</button>
       <button class="cat-btn px-4 py-1.5 rounded-md text-sm font-medium" data-cat="pedals">Effects &amp; Pedals</button>
+      <button class="cat-btn px-4 py-1.5 rounded-md text-sm font-medium" data-cat="keys">Keys &amp; Synths</button>
     </div>
   </div>
 </div>
@@ -294,6 +296,70 @@ const CATS = {
       if (filter === 'Other') return row.group === 'Other' || row.group === 'Others';
       if (filter === 'Vintage / Rare') return row.group === 'Vintage / Rare' || row.group === 'Vintage_Rare';
       return row.group === filter;
+    },
+  },
+  keys: {
+    get data() { return window.KEYS_DATA; },
+    title: 'Keys & Synths Price Index',
+    subtitle: '468 models · indexed to 2018 = 1,000',
+    membershipSubtitle: '468 synth & keyboard models tracked in the index',
+    groupIndexLabel: '2025 YE Index',
+    seriesKeys: ['topline','eurorack','digitalSynths','drumMachinesSamplers','analogSynths','electricPianosOrgans','vintage'],
+    seriesLabels: { topline:'Keys & Synths', eurorack:'Eurorack', digitalSynths:'Digital Synths', drumMachinesSamplers:'Drum Machines', analogSynths:'Analog Synths', electricPianosOrgans:'Electric Pianos', vintage:'Vintage' },
+    colors: { topline:'#1e3a5f', eurorack:'#10b981', digitalSynths:'#3b82f6', drumMachinesSamplers:'#ef4444', analogSynths:'#f59e0b', electricPianosOrgans:'#8b5cf6', vintage:'#7c3aed' },
+    groupColors: {
+      'Eurorack':'#10b981',
+      'Digital Synths':'#3b82f6', 'DigitalSynths':'#3b82f6',
+      'Drum Machines / Samplers':'#ef4444', 'DrumMachines_Samplers':'#ef4444',
+      'Analog Synths':'#f59e0b', 'AnalogSynths':'#f59e0b',
+      'Electric Pianos / Organs':'#8b5cf6', 'ElectricPianos_Organs':'#8b5cf6',
+      'Vintage':'#7c3aed'
+    },
+    annualConfigs: [
+      { aiLabel:'Keys & Synths Index',        color:'#1e3a5f', chartLabel:'Keys & Synths' },
+      { aiLabel:'Eurorack',                    color:'#10b981', chartLabel:'Eurorack' },
+      { aiLabel:'Digital Synths',              color:'#3b82f6', chartLabel:'Digital Synths' },
+      { aiLabel:'Drum Machines / Samplers',    color:'#ef4444', chartLabel:'Drum Machines' },
+      { aiLabel:'Analog Synths',               color:'#f59e0b', chartLabel:'Analog Synths' },
+      { aiLabel:'Electric Pianos / Organs',    color:'#8b5cf6', chartLabel:'Electric Pianos' },
+      { aiLabel:'Vintage',                     color:'#7c3aed', chartLabel:'Vintage' },
+    ],
+    groupToAnnualLabel: {
+      'Eurorack':'Eurorack',
+      'Digital Synths':'Digital Synths', 'DigitalSynths':'Digital Synths',
+      'Drum Machines / Samplers':'Drum Machines / Samplers', 'DrumMachines_Samplers':'Drum Machines / Samplers',
+      'Analog Synths':'Analog Synths', 'AnalogSynths':'Analog Synths',
+      'Electric Pianos / Organs':'Electric Pianos / Organs', 'ElectricPianos_Organs':'Electric Pianos / Organs',
+      'Vintage':'Vintage',
+    },
+    groupCardLabel(g) { return g.group; },
+    ttmPeriodKeys: ['q1-2026'],
+    groupOptions: ['Eurorack','Digital Synths','Drum Machines / Samplers','Analog Synths','Electric Pianos / Organs','Vintage'],
+    membershipShowSubcat: true,
+    badge(g) {
+      const KEYS_BADGE = {
+        'Eurorack':               { label:'Eurorack',            bg:'#d1fae5', color:'#065f46' },
+        'DigitalSynths':          { label:'Digital Synths',      bg:'#dbeafe', color:'#1e40af' },
+        'Digital Synths':         { label:'Digital Synths',      bg:'#dbeafe', color:'#1e40af' },
+        'DrumMachines_Samplers':  { label:'Drum Machines',       bg:'#fee2e2', color:'#991b1b' },
+        'Drum Machines / Samplers':{ label:'Drum Machines',      bg:'#fee2e2', color:'#991b1b' },
+        'AnalogSynths':           { label:'Analog Synths',       bg:'#fef3c7', color:'#92400e' },
+        'Analog Synths':          { label:'Analog Synths',       bg:'#fef3c7', color:'#92400e' },
+        'ElectricPianos_Organs':  { label:'Electric Pianos',     bg:'#ede9fe', color:'#5b21b6' },
+        'Electric Pianos / Organs':{ label:'Electric Pianos',    bg:'#ede9fe', color:'#5b21b6' },
+        'Vintage':                { label:'Vintage',             bg:'#ede9fe', color:'#5b21b6' },
+      };
+      const b = KEYS_BADGE[g] || { label: g||'—', bg:'#f1f5f9', color:'#475569' };
+      return `<span class="group-badge" style="background:${b.bg};color:${b.color}">${b.label}</span>`;
+    },
+    getGroupLatest(g) { return { index: g.index_latest, yoy: g.yoy_latest }; },
+    matchesGroupFilter(row, filter) {
+      const g = row.group;
+      if (filter === 'Digital Synths') return g === 'DigitalSynths' || g === 'Digital Synths';
+      if (filter === 'Drum Machines / Samplers') return g === 'DrumMachines_Samplers' || g === 'Drum Machines / Samplers';
+      if (filter === 'Analog Synths') return g === 'AnalogSynths' || g === 'Analog Synths';
+      if (filter === 'Electric Pianos / Organs') return g === 'ElectricPianos_Organs' || g === 'Electric Pianos / Organs';
+      return g === filter;
     },
   },
 };
@@ -696,7 +762,7 @@ function buildIndexChart() {
 
   // Show/hide subcategory toggle
   const toggleEl = document.getElementById('index-view-toggle');
-  toggleEl.style.display = currentCat === 'pedals' ? '' : 'none';
+  toggleEl.style.display = CAT.membershipShowSubcat ? '' : 'none';
   document.querySelectorAll('.index-view-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'group'));
 
   rebuildIndexLegend();
@@ -885,9 +951,9 @@ function buildCspChart() {
   groupSel.innerHTML = '<option value="">All Groups</option>' +
     CAT.groupOptions.map(g => `<option value="${g}">${g}</option>`).join('');
 
-  // Populate subcategory filter (pedals only)
+  // Populate subcategory filter (pedals + keys)
   const subcatSel = document.getElementById('csp-subcat-filter');
-  if (currentCat === 'pedals') {
+  if (CAT.membershipShowSubcat) {
     const subcats = [...new Set(D.csp_membership.map(c => c.subcategory).filter(Boolean))].sort();
     subcatSel.innerHTML = '<option value="">All Subcategories</option>' +
       subcats.map(s => `<option value="${s}">${s.replace(/-/g,' ').replace(/\b\w/g, c => c.toUpperCase())}</option>`).join('');
