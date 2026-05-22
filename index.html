@@ -66,13 +66,12 @@
   <div class="max-w-7xl mx-auto px-4">
     <div class="flex overflow-x-auto gap-0.5 py-2" id="tab-nav">
       <button class="tab-btn active px-4 py-2 rounded text-sm font-medium" data-tab="summary">Summary Charts</button>
-      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="membership">CSP Membership</button>
       <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="index">Index</button>
       <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm-q1-2026">TTM Q1 2026</button>
       <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm-q4-2025">TTM Q4 2025</button>
       <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="ttm-q3-2025">TTM Q3 2025</button>
-      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="order-counts">Order Counts</button>
-      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="csp-chart">Individual CSP</button>
+<button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="csp-chart">Individual CSP</button>
+      <button class="tab-btn px-4 py-2 rounded text-sm font-medium" data-tab="membership">CSP Membership</button>
     </div>
   </div>
 </nav>
@@ -585,7 +584,7 @@ function buildTtmTable(periodKey, tabDivId) {
               <th class="sortable px-3 py-2 font-semibold text-right" data-col="price_b">${movement.date_b}</th>
               <th class="sortable px-3 py-2 font-semibold text-right" data-col="pct_ttm">TTM %</th>
               <th class="sortable px-3 py-2 font-semibold text-right" data-col="pct_2019">vs 2019</th>
-              <th class="sortable px-3 py-2 font-semibold text-right" data-col="avg_orders">Avg Orders</th>
+              <th class="sortable px-3 py-2 font-semibold text-right" data-col="avg_orders">Popularity</th>
               <th class="sortable px-3 py-2 font-semibold text-right" data-col="weight">Weight</th>
             </tr>
           </thead>
