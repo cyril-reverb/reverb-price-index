@@ -751,6 +751,11 @@ function buildTtmTable(periodKey) {
   if (!movement) return;
 
   let sortCol = 'pct_ttm', sortDir = 'desc', groupFilter = '', searchFilter = '';
+
+  // Build slug→group lookup so pedals rows with blank group get filled in
+  const groupLookup = {};
+  D.csp_membership.forEach(c => { groupLookup[c.slug] = c.group; });
+
   const container = document.getElementById('ttm-content');
 
   // Build period options from CAT config
@@ -807,7 +812,7 @@ function buildTtmTable(periodKey) {
       const q = searchFilter.toLowerCase();
       rows = rows.filter(r => r.slug.includes(q) || slugToName(r.slug).toLowerCase().includes(q));
     }
-    if (groupFilter) rows = rows.filter(r => CAT.matchesGroupFilter(r, groupFilter));
+    if (groupFilter) rows = rows.filter(r => CAT.matchesGroupFilter({ ...r, group: r.group || groupLookup[r.slug] || '' }, groupFilter));
     rows.sort((a, b) => {
       const av = a[sortCol], bv = b[sortCol];
       if (av == null) return 1; if (bv == null) return -1;
@@ -816,13 +821,15 @@ function buildTtmTable(periodKey) {
     });
     const total = movement.rows.filter(r => r.slug).length;
     document.getElementById('ttm-count').textContent = `Showing ${rows.length} of ${total} models`;
-    document.getElementById('ttm-body').innerHTML = rows.map(r => `
+    document.getElementById('ttm-body').innerHTML = rows.map(r => {
+      const group = r.group || groupLookup[r.slug] || '';
+      return `
       <tr class="border-t border-slate-100 hover:bg-slate-50">
         <td class="px-3 py-1.5">
           <a href="${r.link}" target="_blank" class="csp-link">${slugToName(r.slug)}</a>
           ${r.notes ? `<div class="text-slate-400 mt-0.5" style="font-size:0.7rem">${r.notes}</div>` : ''}
         </td>
-        <td class="px-3 py-1.5 text-right">${r.group ? CAT.badge(r.group) : '—'}</td>
+        <td class="px-3 py-1.5 text-right">${group ? CAT.badge(group) : '—'}</td>
         <td class="px-3 py-1.5 text-right text-slate-600">${fmtDollar(r.aov_2019)}</td>
         <td class="px-3 py-1.5 text-right text-slate-600">${fmtDollar(r.price_a)}</td>
         <td class="px-3 py-1.5 text-right font-medium">${fmtDollar(r.price_b)}</td>
@@ -830,7 +837,8 @@ function buildTtmTable(periodKey) {
         <td class="px-3 py-1.5 text-right">${fmtPct(r.pct_2019)}</td>
         <td class="px-3 py-1.5 text-right text-slate-600">${r.avg_orders?.toFixed(1) ?? '—'}</td>
         <td class="px-3 py-1.5 text-right text-slate-500">${r.weight?.toFixed(2)}%</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
     document.querySelectorAll('#ttm-table th.sortable').forEach(th => {
       th.classList.remove('sort-asc','sort-desc');
       if (th.dataset.col === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
